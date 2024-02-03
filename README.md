@@ -8,6 +8,8 @@ Code by Jake Aigner
 
 Uitilizing ADFlib https://github.com/lclevy/ADFlib
 
+If you have installed the deb package simply run "adfman" in a terminal.
+
 To compile run the following:
 
 	mkdir build  # create build dir
