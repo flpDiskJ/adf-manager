@@ -5,7 +5,7 @@
 
 #define INPUT_MAX 500
 
-/*  ADF MAN 0.2 by Jake Aigner Jan, 2024
+/*  ADF MANAGER version 1.0 by Jake Aigner Feb, 2024
  *
  *  ADF Library. (C) 1997-2002 Laurent Clevy
  *
@@ -26,10 +26,19 @@ bool adf_open = false;
 struct AdfDevice *adf;
 struct AdfVolume *vol;
 
-bool strComp(char *input, char *comp, int offset) // compares strings
+typedef struct configFile{
+    uint16_t inputSize;
+    uint16_t outputSize;
+    char output_path[INPUT_MAX];
+    char input_path[INPUT_MAX];
+} configFile;
+
+configFile settings;
+
+bool strComp(char *input, char *comp) // compares strings
 {
     bool same = true;
-    for (int x = offset; x < strlen(comp); x++)
+    for (int x = 0; x < strlen(comp); x++)
     {
         if (input[x] != comp[x])
         {
@@ -44,7 +53,7 @@ void intro() // intro display
     printf("   #######\n");
     printf(" | ADF MAN |\n");
     printf(" |         |\n");
-    printf(" |__V0.2___|\n");
+    printf(" |__V1.0___|\n");
     printf("      |\n");
     printf("    \\ | /\n");
     printf("     \\|/\n");
@@ -56,21 +65,71 @@ void intro() // intro display
     printf("by Jake Aigner (2024)\n");
 }
 
+void load_config()
+{
+    FILE *fp = fopen("config", "rb");
+    if (!fp)
+    {
+        printf("Failed to read config file or no config file exists!\nrun 'config' to create file\n");
+        return;
+    }
+    fread(&settings.inputSize, 2, 1, fp);
+    fread(&settings.outputSize, 2, 1, fp);
+    fread(&settings.input_path, 1, settings.inputSize, fp);
+    fread(&settings.output_path, 1, settings.outputSize, fp);
+    fclose(fp);
+    settings.input_path[settings.inputSize] = '\0';
+    settings.output_path[settings.outputSize] = '\0';
+}
+
+void config()
+{
+    settings.output_path[0] = '\0';
+    settings.input_path[0] = '\0';
+    printf("        Main path: ");
+    fgets(settings.output_path, INPUT_MAX, stdin);
+    printf("        ADF path: ");
+    fgets(settings.input_path, INPUT_MAX, stdin);
+    settings.outputSize = strlen(settings.output_path) - 1;
+    settings.inputSize = strlen(settings.input_path) - 1;
+    system("rm config");
+    FILE *fp = fopen("config", "wb");
+    if (!fp)
+    {
+        printf("        Error creating config file!\n");
+        return;
+    }
+    fwrite(&settings.inputSize, 2, 1, fp);
+    fwrite(&settings.outputSize, 2, 1, fp);
+    fwrite(&settings.input_path, 1, settings.inputSize, fp);
+    fwrite(&settings.output_path, 1, settings.outputSize, fp);
+    fclose(fp);
+}
+
+void adf_path(char *path)
+{
+    settings.input_path[0] = '\0';
+    strcpy(settings.input_path, path);
+    settings.inputSize = strlen(settings.input_path) + 1;
+}
+
 void help() // lists commands
 {
     printf("        List of Commands:\n");
-    printf("            endshell : quit\n");
-    printf("            help : command list\n");
-    printf("            clear : clear the screen\n");
-    printf("            new : create empty adf\n");
-    printf("            open : open adf\n");
-    printf("            cd : change directory\n");
-    printf("            mkdir : make new directory\n");
-    printf("            list : list contents of adf\n");
-    printf("            push : add file to adf\n");
-    printf("            pull : extract file from adf\n");
-    printf("            extract : extract entire adf (limited to 2 subdirs)\n");
-    printf("            delete : delete file from adf\n");
+    printf("            endshell :    quit.\n");
+    printf("            help     :    command list.\n");
+    printf("            clear    :    clear the screen.\n");
+    printf("            new      :    create empty adf.      args: filename\n");
+    printf("            open     :    open adf.              args: filename\n");
+    printf("            cd       :    change directory.      args: dirname\n");
+    printf("            mkdir    :    make new directory.    args: dirname\n");
+    printf("            list     :    list contents of adf.  args: main, adf\n");
+    printf("            push     :    add file to adf.       args: filename\n");
+    printf("            pull     :    extract file from adf. args: filename\n");
+    printf("            extract  :    extract entire adf. (limited to 2 subdirs)\n");
+    printf("            delete   :    delete file from adf.  args: filename\n");
+    printf("            config   :    edit config file.\n");
+    printf("            adfpath  :    change adf file path. (doesn't affect config file) args: /path/to/files/\n");
 }
 
 void closeADF()
@@ -83,13 +142,14 @@ void closeADF()
     }
 }
 
-void openADF()
+void openADF(char *name)
 {
     closeADF();
-    char name[INPUT_MAX];
-    printf("Enter ADF Name: ");
-    scanf("%s", &name);
-    adf = adfMountDev(&name[0], false);
+    char full[INPUT_MAX];
+    full[0] = '\0';
+    strcpy(full, settings.input_path);
+    strncat(full, name, strlen(name));
+    adf = adfMountDev(full, false);
     if (!adf)
     {
         printf("        Failed to open ADF!\n");
@@ -104,13 +164,13 @@ void openADF()
     }
 }
 
-void newADF()
+void newADF(char *name)
 {
     closeADF();
-    char name[INPUT_MAX];
-    printf("Enter ADF Name: ");
-    scanf("%s", &name);
-    adf = adfCreateDumpDevice(&name[0], 80, 2, 11);
+    char full[INPUT_MAX];
+    strcpy(full, settings.input_path);
+    strncat(full, name, strlen(name));
+    adf = adfCreateDumpDevice(full, 80, 2, 11);
     if (!adf)
     {
         printf("        Failed to create dump device!\n");
@@ -162,23 +222,23 @@ void list() // lists contents of adf
     adfFreeDirList(list);
 }
 
-void push()
+void push(char *filename)
 {
     if (!adf_open)
     {
         printf("        No ADF open!\n");
         return;
     }
-    char filename[INPUT_MAX];
-    printf("Filename: ");
-    scanf("%s", &filename);
-    FILE *fp = fopen(&filename[0], "rb");
+    char full[INPUT_MAX];
+    strcpy(full, settings.output_path);
+    strncat(full, filename, strlen(filename));
+    FILE *fp = fopen(full, "rb");
     if (!fp)
     {
         printf("        Failed to read file!\n");
         return;
     }
-    struct AdfFile *afp = adfFileOpen(vol, &filename[0], 2); // 2 for write mode
+    struct AdfFile *afp = adfFileOpen(vol, filename, 2); // 2 for write mode
     if (!afp)
     {
         printf("        Failed to create file!\n");
@@ -294,31 +354,35 @@ void pull_subdirs(char *p)
 
 void pull_all()
 {
-    system("rm extract -r");
-    system("mkdir extract");
+    char comm[INPUT_MAX];
+    strcpy(&comm[0], "mkdir ");
+    strncat(&comm[0], &settings.output_path[0], settings.outputSize);
+    strncat(&comm[0], "extract", 8);
+    system(&comm[0]);
     char path[INPUT_MAX];
-    strcpy(&path[0], "extract/");
+    strcpy(&path[0], &settings.output_path[0]);
+    strncat(&path[0], "extract/", 9);
     pull_files(&path[0]);
     pull_subdirs(&path[0]);
 }
 
-void pull()
+void pull(char *filename)
 {
     if (!adf_open)
     {
         printf("        No ADF open!\n");
         return;
     }
-    char filename[INPUT_MAX];
-    printf("Filename: ");
-    scanf("%s", &filename);
-    FILE *fp = fopen(&filename[0], "wb");
+    char full[INPUT_MAX];
+    strcpy(full, settings.output_path);
+    strncat(full, filename, strlen(filename));
+    FILE *fp = fopen(full, "wb");
     if (!fp)
     {
         printf("        Failed to open output file!\n");
         return;
     }
-    struct AdfFile *afp = adfFileOpen(vol, &filename[0], 1); // 1 for read mode
+    struct AdfFile *afp = adfFileOpen(vol, filename, 1); // 1 for read mode
     if (!afp)
     {
         printf("        Failed to open file!\n");
@@ -341,16 +405,13 @@ void pull()
     fclose(fp);
 }
 
-void delete()
+void delete(char *filename)
 {
     if (!adf_open)
     {
         printf("        No ADF open!\n");
         return;
     }
-    char filename[INPUT_MAX];
-    printf("Filename: ");
-    scanf("%s", &filename);
     struct AdfList *list, *cell;
     struct AdfEntry *entry;
     cell = list = adfGetDirEnt(vol,vol->curDirPtr);
@@ -358,21 +419,18 @@ void delete()
     entry = (struct AdfEntry*)cell->content;
     sector = entry->parent;
     adfFreeDirList(list);
-    adfRemoveEntry(vol, sector, &filename[0]);
+    adfRemoveEntry(vol, sector, filename);
 }
 
-void cd()
+void cd(char *dir)
 {
     if (!adf_open)
     {
         printf("        No ADF open!\n");
         return;
     }
-    char name[INPUT_MAX];
-    printf("Dir: ");
-    scanf("%s", &name);
     RETCODE rc;
-    if (strComp(&name[0], "..", 0))
+    if (strComp(dir, ".."))
     {
         rc = adfParentDir(vol);
         if (rc != RC_OK)
@@ -380,7 +438,7 @@ void cd()
             printf("        Couldn't get parent dir!\n");
         }
     } else {
-        rc = adfChangeDir(vol, &name[0]);
+        rc = adfChangeDir(vol, dir);
         if (rc != RC_OK)
         {
             printf("        Invalid directory!\n");
@@ -388,75 +446,115 @@ void cd()
     }
 }
 
-void makedir()
+void makedir(char *dir)
 {
     if (!adf_open)
     {
         printf("        No ADF open!\n");
         return;
     }
-    char name[INPUT_MAX];
-    printf("Dir: ");
-    scanf("%s", &name);
-    RETCODE rc = adfCreateDir(vol, vol->curDirPtr, &name[0]);
+    RETCODE rc = adfCreateDir(vol, vol->curDirPtr, dir);
     if (rc != RC_OK)
     {
         printf("        Failed to create dir!\n");
     }
 }
 
+void list_main()
+{
+    char comm[INPUT_MAX];
+    strcpy(&comm[0], "ls ");
+    strncat(&comm[0], &settings.output_path[0], settings.outputSize-1);
+    printf("        %s\n", settings.output_path);
+    system(&comm[0]);
+}
+
+void list_adf()
+{
+    char comm[INPUT_MAX];
+    strcpy(&comm[0], "ls ");
+    strncat(&comm[0], &settings.input_path[0], settings.inputSize-1);
+    printf("        %s\n", settings.input_path);
+    system(&comm[0]);
+}
+
 void shell() // handles user input
 {
     char input[INPUT_MAX];
     printf("? -> ");
-    scanf("%s", &input);
+    fgets(input, INPUT_MAX, stdin);
+    char command[INPUT_MAX];
+    char arg[INPUT_MAX];
+    command[0] = '\0';
+    arg[0] = '\0';
+    char *token = strtok(input, " \n\t\r");
+    strcpy(command, token);
+    token = strtok(NULL, " \n\t\r");
+    if (token != NULL)
+    {
+        strcpy(arg, token);
+    }
 
-    if (strComp(&input[0], "endshell", 0))
+    if (strComp(command, "endshell\0"))
     {
         closeADF();
         run = false;
     }
-    else if (strComp(&input[0], "help", 0))
+    else if (strComp(command, "help\0"))
     {
         help();
     }
-    else if (strComp(&input[0], "clear", 0))
+    else if (strComp(command, "clear\0"))
     {
         system("clear");
         intro();
     }
-    else if (strComp(&input[0], "new", 0))
+    else if (strComp(command, "new\0"))
     {
-        newADF();
+        newADF(arg);
     }
-    else if (strComp(&input[0], "open", 0))
+    else if (strComp(command, "open\0"))
     {
-        openADF();
+        openADF(arg);
     }
-    else if (strComp(&input[0], "list", 0))
+    else if (strComp(command, "list\0"))
     {
-        list();
+        if (strComp(arg, "main"))
+        {
+            list_main();
+        } else if (strComp(arg, "adf"))
+        {
+            list_adf();
+        } else {
+            list();
+        }
     }
-    else if (strComp(&input[0], "push", 0))
+    else if (strComp(command, "push\0"))
     {
-        push();
+        push(arg);
     }
-    else if (strComp(&input[0], "pull", 0))
+    else if (strComp(command, "pull\0"))
     {
-        pull();
+        pull(arg);
     }
-    else if (strComp(&input[0], "delete", 0))
+    else if (strComp(command, "delete\0"))
     {
-        delete();
-    } else if (strComp(&input[0], "cd", 0))
+        delete(arg);
+    } else if (strComp(command, "cd\0"))
     {
-        cd();
-    } else if (strComp(&input[0], "mkdir", 0))
+        cd(arg);
+    } else if (strComp(command, "mkdir\0"))
     {
-        makedir();
-    } else if (strComp(&input[0], "extract", 0))
+        makedir(arg);
+    } else if (strComp(command, "extract\0"))
     {
         pull_all();
+    } else if (strComp(command, "config\0"))
+    {
+        config();
+    } else if (strComp(command, "adfpath\0"))
+    {
+        adf_path(arg);
     }
 }
 
@@ -464,6 +562,8 @@ int main()
 {
     adfEnvInitDefault();
     intro();
+    load_config();
+    printf("Main: %s | ADF: %s\n", settings.output_path, settings.input_path);
     while (run)
     {
         shell();
