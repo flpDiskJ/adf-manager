@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.8)
-project(ADFman)
+project(adfman)
 
 set(SRC ${CMAKE_SOURCE_DIR}/src)
 
-add_executable(ADFman
+add_executable(adfman
 	${SRC}/adf-man.c
 	${SRC}/adflib/adf_bitm.c
 	${SRC}/adflib/adf_cache.c
@@ -26,6 +26,17 @@ add_executable(ADFman
 )
 
 target_include_directories(
-	ADFman PUBLIC
+	adfman PUBLIC
 	${SRC}/adflib/
 )
+
+install(TARGETS adfman
+    COMPONENT linapp
+    RUNTIME DESTINATION "/bin/"
+    LIBRARY DESTINATION "/lib/"
+    DESTINATION "/bin/"
+)
+
+SET(CPACK_GENERATOR "DEB")
+SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "KK") #required
+INCLUDE(CPack)

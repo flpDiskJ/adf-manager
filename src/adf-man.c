@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include "adflib.h"
 #include <string.h>
@@ -67,7 +68,10 @@ void intro() // intro display
 
 void load_config()
 {
-    FILE *fp = fopen("config", "rb");
+    char file[INPUT_MAX];
+    strcpy(file, getenv("HOME"));
+    strncat(file, "/.adfman_config", 16);
+    FILE *fp = fopen(file, "rb");
     if (!fp)
     {
         printf("Failed to read config file or no config file exists!\nrun 'config' to create file\n");
@@ -92,8 +96,11 @@ void config()
     fgets(settings.input_path, INPUT_MAX, stdin);
     settings.outputSize = strlen(settings.output_path) - 1;
     settings.inputSize = strlen(settings.input_path) - 1;
-    system("rm config");
-    FILE *fp = fopen("config", "wb");
+    char file[INPUT_MAX];
+    strcpy(file, getenv("HOME"));
+    strncat(file, "/.adfman_config", 16);
+    system("rm ~/.adfman_config");
+    FILE *fp = fopen(file, "wb");
     if (!fp)
     {
         printf("        Error creating config file!\n");
